@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<wsc:config name="Web_Service_Consumer_Config" doc:name="Web Service Consumer Config" doc:id="1d0403c5-f08e-45f8-bb9d-9e15e144b427" >
+		<wsc:connection wsdlLocation="https://eeta-dev2.fa.us6.oraclecloud.com/fscmService/PurchaseOrderServiceV2?WSDL" service="PurchaseOrderService" port="PurchaseOrderServiceSoapHttpPort" address="https://eeta-dev2.fa.us6.oraclecloud.com:443/fscmService/PurchaseOrderServiceV2">
+		<wsc:web-service-security >
+				<wsc:username-token-security-strategy username="ICS_INT_USER2" password="DEV22019Connect" />
+			</wsc:web-service-security>
+		</wsc:connection>
+	</wsc:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="6cc6be89-1c31-4ef4-ba56-ff8041f97eaa" >
+		<http:listener-connection host="localhost" port="8100" />
+	</http:listener-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="9023a0bb-0b8e-40b0-949d-52710bd9f865" >
+		<db:generic-connection url="jdbc:snowflake://indigoproduction.us-east-1.snowflakecomputing.com/?user=MULE_INT_USER2&amp;warehouse=DS_WH&amp;db=SCRATCH&amp;schema=MULE_INT_USER2" driverClassName="com.snowflake.client.jdbc.SnowflakeDriver" user="MULE_INT_USER2" password="jiIRcrOfIX" />
+	</db:config>
+	<flow name="iag-kuebix-schdFlow" doc:id="87e14d0e-a1cf-480f-82c0-af03a602cdd5" >
+		<http:listener doc:name="Listener" doc:id="e5a03ea9-10ec-4d67-87b8-c2f59565ec37" config-ref="HTTP_Listener_config" path="/test"/>
+		<db:select doc:name="Retrieve Marketplace Details" doc:id="3a66d177-2869-435b-81cb-5f455ad5d835" config-ref="Database_Config" >
+			<db:sql >
+SELECT mpa.referenceid, 
+       mpa.uid                      AS tx_uid, 
+       mpa.createdat                AS CREATEDATE, 
+       ccm.commodity                AS CROP_HIGHLEVEL, 
+       mpa.crop                     AS CROP_SPECIFIC, 
+       cbs.symbol                   AS Futures_commodity_code, 
+       mpa.cropquantity, 
+       mpa.cropqualityconstraint, 
+       mpdo.acceptedquantity, 
+       mpdo.contractedquantity, 
+       mpa.basismonthcode, 
+       mpa.basisyear, 
+       mpa.shippingprovider, 
+       mpdo.deliveryatstart         AS DELIVERYATSTART, 
+       mpdo.deliveryatend           AS DELIVERYATEND, 
+       mpdp.externalid              AS buyer_sf_id, 
+       buyer_sfaccount.indigoid__c  AS buyer_indigo_id, 
+       mpa.buyerbasisvalue, 
+       mpa.buyerprice, 
+       mpa.basislockedinprice, 
+       mpdo.contactname, 
+       mpdo.contactemail, 
+       mpdo.contactphonenumber, 
+       mpdo.deliverystreet, 
+       mpdo.deliverycity, 
+       mpdo.deliverystate, 
+       mpdo.deliverypostalcode, 
+       mpdo.deliverycounty, 
+       mpdo.deliverycountry, 
+       csa.salesforceid             AS seller_sf_id, 
+       seller_sfaccount.indigoid__c AS seller_indigo_id, 
+       csa.NAME                     AS seller_legalentityname, 
+       mpa.sellerbasisvalue, 
+       mpa.sellerprice, 
+       csa.billingstreet            AS seller_legalentitystreet, 
+       csa.billingcity              AS seller_legalentitycity, 
+       csa.billingstate             AS seller_legalentitystate, 
+       csa.billingcounty            AS seller_legalentitycounty, 
+       csa.billingcountry           AS seller_legalentitycountry 
+FROM   parthenon.app_marketplace_api.marketplaceacceptance AS mpa 
+       LEFT JOIN parthenon.app_marketplace_api.marketplacesupplyprofile AS mpsp 
+              ON mpa.selleruid = mpsp.uid 
+       LEFT JOIN parthenon.app_marketplace_api.marketplacedemandprofile AS mpdp 
+              ON mpa.buyeruid = mpdp.uid 
+       LEFT JOIN parthenon.app_ceres.account AS csa 
+              ON mpsp.accountuid = csa.uid 
+       LEFT JOIN parthenon.salesforce.account AS seller_sfaccount 
+              ON seller_sfaccount.id = csa.salesforceid 
+       LEFT JOIN parthenon.salesforce.account AS buyer_sfaccount 
+              ON buyer_sfaccount.id = mpdp.externalid 
+       LEFT JOIN parthenon.app_ceres.account AS cda 
+              ON mpdp.accountuid = cda.uid 
+       LEFT JOIN parthenon.app_marketplace_api.demandorder AS mpdo 
+              ON mpdo.id = mpa.demandorderid 
+       LEFT JOIN parthenon.looker_scratch.cropmap_crop_to_commodity AS ccm 
+              ON mpa.crop = ccm.crop 
+       LEFT JOIN parthenon.app_marketplace_bid_api.crop_basis_symbol AS cbs 
+              ON mpa.crop = cbs.crop 
+WHERE  mpa.createdat &gt;= Dateadd('days', -400, CURRENT_DATE) ORDER  BY 
+mpa.createdat DESC LIMIT 10
+
+    </db:sql>
+		</db:select>
+		<ee:transform doc:name="Transform To JSON" doc:id="64fbcb19-390b-4af4-8fc1-ad1830ac0dcd" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<foreach doc:name="For Each" doc:id="5d71de74-ef1b-4eaa-b57e-9d0e1b68b066" >
+			<ee:transform doc:name="SOAP Envelope For PO" doc:id="b300873a-7f91-4f17-bc38-8bfafdd79303">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/xml
+ns ns0 http://xmlns.oracle.com/apps/prc/po/editDocument/flex/draftPurchaseOrderDistribution/
+ns ns01 http://schemas.xmlsoap.org/soap/envelope/
+ns ns02 http://xmlns.oracle.com/apps/prc/po/editDocument/purchaseOrderServiceV2/types/
+ns ns03 http://xmlns.oracle.com/apps/prc/po/editDocument/purchaseOrderServiceV2/
+ns ns04 http://xmlns.oracle.com/apps/prc/po/editDocument/flex/draftPurchasingDocumentHeader/
+---
+{
+	ns01#Envelope: {
+		ns01#Body: {
+			ns02#createPurchaseOrder: {
+				ns02#createOrderEntry: {
+					ns03#POHeaderId: "id",
+					ns03#OrderNumber: "C-10001",
+					ns03#DocumentStyle: "Market Place SPO",
+					ns03#DocumentTypeCode: "STANDARD",
+					ns03#ProcurementBusinessUnit: "Indigo BU",
+					ns03#RequisitioningBusinessUnit: "Indigo BU",
+					ns03#SoldToLegalEntity:  "Indigo Ag, Inc.",
+					ns03#BillToBusinessUnit: "Indigo BU",
+					ns03#ApprovalActionCode: "BYPASS",
+					ns03#BuyerName: "Commercial,Buyer1",
+					ns03#SupplierId: "Indigo",
+					ns03#Supplier: "BPA",
+					ns03#SupplierSiteCode: "BPA",
+					ns03#SupplierCommunicationMethodCode: "NONE",
+					ns03#DefaultShipToLocationCode: "Indigo Ag - Market Place",
+					ns03#CurrencyCode: "USD",
+					ns03#DocumentDescription: "MarketPlace PO || BPA # CICC-20001 || MP Trx ID # 20001 || 08-28-2019",
+					ns03#InterfaceSourceCode: "MARKETPLACE",
+					ns03#PurchaseOrderEntryLine: {
+						ns03#POLineId: "1",
+						ns03#LineNumber: payload.SELLERBASISVALUE default 0,
+						ns03#LineType: "Goods",
+						ns03#ItemNumber: payload.SELLER_LEGALENTITYNAME default "",
+						ns03#UnitOfMeasureCode: "BU",
+						ns03#SourceAgreementProcurementBusinessUnit: "Indigo BU",
+						ns03#SourceAgreementNumber: "BPA Number"
+					},
+					ns03#HeaderFlexfield: {
+						ns04#"__FLEX_Context": "MARKETPLACE",
+						ns04#"_FLEX_NumOfSegments": "5"
+					}
+				}
+			}
+		}
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			<wsc:consume doc:name="Consume" doc:id="11a5151f-c3e1-4b8c-bd01-b682da82d663" config-ref="Web_Service_Consumer_Config" operation="createPurchaseOrder" />
+			<logger level="INFO" doc:name="Step Logger" doc:id="8ad3ca76-3583-4a1c-baae-4db550d0b3f8" message="json:::#[payload]" />
+		</foreach>
+	</flow>
+</mule>
